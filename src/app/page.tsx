@@ -1,7 +1,6 @@
 "use client";
 
 import React, { useState } from "react";
-import ReactDOM from "react-dom";
 import "./styles.css";
 
 // Styles for the Sudoku board
@@ -165,7 +164,7 @@ export default function Home() {
 
   return (
     <div>
-      <h1>Sudoku Board</h1>
+      <h1>Swaydoku</h1>
       <div style={styles.board}>
         {board.map((row, rowIndex) =>
           row.map((cell, colIndex) => (
