@@ -1,39 +1,44 @@
 'use client';
 
-import React, { useState } from 'react';
-import { useConnectUI, useDisconnect } from '@fuels/react';
+import React, { useMemo, useState } from 'react';
+import {
+  useConnectUI,
+  useDisconnect,
+  useProvider,
+  useWallet,
+} from '@fuels/react';
 import './styles.css';
+import { Verifier } from './generated';
+import { ScriptTransactionRequest } from 'fuels';
 
 // Styles for the Sudoku board
 const styles: { [key: string]: React.CSSProperties } = {
   board: {
     display: 'grid',
-    gridTemplateColumns: 'repeat(9, 50px)',
-    gridTemplateRows: 'repeat(9, 50px)',
+    gridTemplateColumns: 'repeat(9, 55px)',
+    gridTemplateRows: 'repeat(9, 55px)',
     justifyContent: 'center',
     marginTop: '20px',
   },
   cell: {
-    width: '50px',
-    height: '50px',
+    width: '55px',
+    height: '55px',
     padding: '1px',
     textAlign: 'center',
-    fontSize: '18px',
+    fontSize: '26px',
     border: '1px solid #ccc',
     outline: 'none',
-    color: 'black',
+    color: 'blue',
   },
   fixedCell: {
-    width: '50px',
-    height: '50px',
+    width: '55px',
+    height: '55px',
     padding: '1px',
     textAlign: 'center',
-    fontSize: '18px',
+    fontSize: '26px',
     border: '1px solid #ccc',
     outline: 'none',
-    backgroundColor: '#ddd',
     color: 'black',
-    fontWeight: 'bold',
   },
   button: {
     marginTop: '20px',
@@ -46,6 +51,10 @@ const styles: { [key: string]: React.CSSProperties } = {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
+  },
+  description: {
+    color: 'black',
+    fontSize: '14px',
   },
 };
 
@@ -125,14 +134,20 @@ const generateSudoku = (): { unsolved: Board; solved: Board } => {
 };
 
 export default function PuzzleBoard() {
+  // Board state
   const { unsolved, solved } = generateSudoku();
-
   const [board, setBoard] = useState<Board>(unsolved);
   const [solvedBoard, setSolvedBoard] = useState<Board>(solved);
+  const [isCorrect, setIsCorrect] = useState(false);
+
+  // Error handler
+  const [error, setError] = useState<string | null>(null);
 
   // Wallet connector
   const { connect, isConnected } = useConnectUI();
   const { disconnect } = useDisconnect();
+  const { provider } = useProvider();
+  const { wallet } = useWallet();
 
   // Handle input changes in cells
   const handleChange = (row: number, col: number, value: string): void => {
@@ -152,6 +167,8 @@ export default function PuzzleBoard() {
     const { unsolved, solved } = generateSudoku();
     setBoard(unsolved);
     setSolvedBoard(solved);
+    setIsCorrect(false);
+    setError(null);
   };
 
   // Handle clearing inputs without regenerating the puzzle
@@ -161,6 +178,8 @@ export default function PuzzleBoard() {
     );
 
     setBoard(clearedBoard);
+    setIsCorrect(false);
+    setError(null);
   };
 
   // Handle revealing the solved board
@@ -176,11 +195,76 @@ export default function PuzzleBoard() {
   };
 
   // Handle submitting the board
-  const handleSubmit = (): void => {
-    console.log('Submitted board: ', board);
+  const handleSubmit = async (): Promise<void> => {
+    if (!provider || !wallet || !isConnected) {
+      setError('Wallet not connected');
+      return;
+    }
+
+    const params = board.flatMap((row) =>
+      row.map((cell) => parseInt(cell.value))
+    );
+    const predicate = new Verifier({ provider, data: [params] });
+
+    // The amount of coins to send to the predicate
+    const amountToPredicate = 1_000;
+
+    try {
+      // Add some funds to the predicate to be able to spend the predicate
+      const transactionRequest = new ScriptTransactionRequest({
+        gasLimit: 2000,
+        maxFee: 0,
+      });
+
+      // Get the resources available to send from the predicate
+      const predicateCoins = await predicate.getResourcesToSpend([
+        { amount: 2000, assetId: provider.getBaseAssetId() },
+      ]);
+
+      // Add the predicate input and resources
+      transactionRequest.addResources(predicateCoins);
+
+      // Fund the predicate with some funds from our wallet (sender)
+      const fundPredicateTx = await wallet.transfer(
+        predicate.address,
+        amountToPredicate,
+        provider.getBaseAssetId()
+      );
+
+      // Wait for the transaction
+      await fundPredicateTx.waitForResult();
+
+      // The amount of coins to send from the predicate, to our receiver wallet.
+      const amountToReceiver = 1;
+
+      // Transfer funds from the predicate, to our receiver wallet
+      const transferFromPredicateTx = await predicate.transfer(
+        wallet.address,
+        amountToReceiver,
+        provider.getBaseAssetId()
+      );
+
+      // Wait for the transaction
+      let result = await transferFromPredicateTx.waitForResult();
+      setIsCorrect(result.isStatusSuccess);
+    } catch (e) {
+      const errString = `${e}`;
+      if (errString.includes('PredicateReturnedNonOne')) {
+        setError('Incorrect!');
+      } else {
+        setError(errString);
+      }
+    }
   };
 
-  // const p = 1; // TODO: interact with the predicate
+  const isSubmitEnabled = useMemo(() => {
+    return (
+      isConnected &&
+      provider &&
+      wallet &&
+      board.every((row) => row.every((cell) => /^[1-9]$/.test(cell.value)))
+    );
+  }, [isConnected, provider, wallet, board]);
 
   return (
     <div>
@@ -192,8 +276,15 @@ export default function PuzzleBoard() {
           {isConnected ? 'Disconnect' : 'Connect'}
         </button>
       </div>
-      <p style={{ color: 'black' }}>
+      <p style={styles.description}>
         Fill in the board with numbers from 1 to 9
+      </p>
+      <p style={styles.description}>
+        Each row, column, and 3x3 subgrid must contain all the numbers from 1 to
+        9
+      </p>
+      <p style={styles.description}>
+        The board will be submitted to a predicate that will verify the solution
       </p>
       <div style={styles.board}>
         {board.map((row, rowIndex) =>
@@ -223,15 +314,17 @@ export default function PuzzleBoard() {
         Reveal
       </button>
       <button
-        style={{ ...styles.button, background: 'green' }}
+        disabled={!isSubmitEnabled}
+        style={{
+          ...styles.button,
+          background: isSubmitEnabled ? 'green' : 'gray',
+          cursor: isSubmitEnabled ? 'pointer' : 'not-allowed',
+        }}
         onClick={handleSubmit}>
         Submit
       </button>
-      <pre style={{ color: 'black' }}>
-        {solvedBoard
-          .map((row) => row.map((cell) => cell.value).join(','))
-          .join('\n')}
-      </pre>
+      {error && <p style={{ color: 'red' }}>{error}</p>}
+      {isCorrect && <p style={{ color: 'green' }}>Correct!</p>}
     </div>
   );
 }

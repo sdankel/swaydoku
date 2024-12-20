@@ -5,3 +5,4 @@ license = "Apache-2.0"
 name = "verifier"
 
 [dependencies]
+std = { git = "https://github.com/FuelLabs/sway", version = "v0.66.5" }
