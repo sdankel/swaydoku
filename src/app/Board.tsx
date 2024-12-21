@@ -387,7 +387,7 @@ export default function PuzzleBoard() {
       ) : error ? (
         <p style={styles.error}>{error}</p>
       ) : (
-        <p style={styles.error}> </p>
+        <p style={{ ...styles.error, color: 'transparent' }}>Placeholder</p>
       )}
     </div>
   );
