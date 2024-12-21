@@ -1,14 +1,18 @@
 import { Board } from './Board';
 
-// Function to generate a random Sudoku puzzle
-export const generateSudoku = (): { unsolved: Board; solved: Board } => {
-  const emptyBoard: Board = Array.from({ length: 9 }, () =>
+// Generates an empty Sudoku board.
+export const emptyBoard = (): Board =>
+  Array.from({ length: 9 }, () =>
     Array.from({ length: 9 }, () => ({
       value: '',
       fixed: false,
       notes: new Set(),
     }))
   );
+
+// Generates a random Sudoku puzzle. Not guaranteed to have a unique solution.
+export const generateSudoku = (): { unsolved: Board; solved: Board } => {
+  const board = emptyBoard();
 
   const isValidPlacement = (
     board: Board,
@@ -53,9 +57,9 @@ export const generateSudoku = (): { unsolved: Board; solved: Board } => {
     return true;
   };
 
-  fillBoard(emptyBoard);
-  const solved = emptyBoard;
-  const unsolved = emptyBoard.map((row) => {
+  fillBoard(board);
+  const solved = board;
+  const unsolved = board.map((row) => {
     return row.map((cell) => {
       const fixed = Math.random() < 0.35; // Difficulty level. TODO: Make this configurable
       return fixed ? cell : { ...cell, value: '', fixed: false };

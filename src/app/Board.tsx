@@ -16,7 +16,7 @@ import {
 import './styles.css';
 import { Verifier } from './generated';
 import { ScriptTransactionRequest } from 'fuels';
-import { generateSudoku } from './util';
+import { emptyBoard, generateSudoku } from './util';
 import BoardCell from './BoardCell';
 
 // Styles for the Sudoku board
@@ -83,15 +83,15 @@ export type Board = Cell[][];
 
 export default function PuzzleBoard() {
   // Board state
-  const { unsolved, solved } = generateSudoku();
-  const [board, setBoard] = useState<Board>(unsolved);
-  const [solvedBoard, setSolvedBoard] = useState<Board>(solved);
+  const [board, setBoard] = useState<Board>(emptyBoard());
+  const [solvedBoard, setSolvedBoard] = useState<Board>(emptyBoard());
   const [selectedCell, setSelectedCell] = useState<{
     row: number;
     col: number;
   } | null>(null);
   const [isCorrect, setIsCorrect] = useState(false);
   const [notesMode, setNotesMode] = useState(false);
+  const [isInitialized, setIsInitialized] = useState(false);
 
   // Refs for navigation
   const refs = useRef<(HTMLInputElement | null)[][]>(
@@ -168,17 +168,17 @@ export default function PuzzleBoard() {
   );
 
   // Handle generating a new puzzle
-  const handleNewPuzzle = (): void => {
+  const handleNewPuzzle = useCallback((): void => {
     const { unsolved, solved } = generateSudoku();
     setBoard(unsolved);
     setSolvedBoard(solved);
     setSelectedCell(null);
     setIsCorrect(false);
     setError(null);
-  };
+  }, [setBoard, setSolvedBoard, setSelectedCell, setIsCorrect, setError]);
 
   // Handle clearing inputs without regenerating the puzzle
-  const handleClearBoard = (): void => {
+  const handleClearBoard = useCallback((): void => {
     const clearedBoard = board.map((row) =>
       row.map((cell) => (cell.fixed ? cell : { ...cell, value: '' }))
     );
@@ -186,10 +186,10 @@ export default function PuzzleBoard() {
     setBoard(clearedBoard);
     setIsCorrect(false);
     setError(null);
-  };
+  }, [board, setBoard, setIsCorrect, setError]);
 
   // Handle revealing the solved board
-  const handleRevealBoard = (): void => {
+  const handleRevealBoard = useCallback((): void => {
     const revealedBoard = solvedBoard.map((row, rowIndex) => {
       return row.map((cell, colIndex) => {
         return board[rowIndex][colIndex].fixed
@@ -198,7 +198,7 @@ export default function PuzzleBoard() {
       });
     });
     setBoard(revealedBoard);
-  };
+  }, [board, solvedBoard, setBoard]);
 
   // Handle submitting the board
   const handleSubmit = async (): Promise<void> => {
@@ -273,6 +273,13 @@ export default function PuzzleBoard() {
   }, [isConnected, provider, wallet, board]);
 
   useEffect(() => {
+    if (!isInitialized) {
+      handleNewPuzzle();
+      setIsInitialized(true);
+    }
+  }, [isInitialized, handleNewPuzzle]);
+
+  useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key.toLowerCase() === 'n') {
         setNotesMode((prev) => !prev);
@@ -313,6 +320,13 @@ export default function PuzzleBoard() {
       refs.current[row][col]?.focus(); // Focus the selected input field
     }
   }, [selectedCell]);
+
+  console.log(
+    solvedBoard.map((row) => row.map((cell) => cell.value).join(' ')).join('\n')
+  );
+  console.log(
+    board.map((row) => row.map((cell) => cell.fixed).join(' ')).join('\n')
+  );
 
   return (
     <div style={styles.boardContainer}>
