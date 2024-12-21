@@ -21,7 +21,7 @@ import BoardCell from './BoardCell';
 
 // Styles for the Sudoku board
 const styles: { [key: string]: React.CSSProperties } = {
-  page: {
+  boardContainer: {
     width: '500px',
   },
   board: {
@@ -29,19 +29,28 @@ const styles: { [key: string]: React.CSSProperties } = {
     gridTemplateColumns: 'repeat(9, 55px)',
     gridTemplateRows: 'repeat(9, 55px)',
     justifyContent: 'center',
-    marginTop: '20px',
+    marginTop: '10px',
   },
   button: {
     marginTop: '20px',
-    marginRight: '10px',
     padding: '10px 20px',
     fontSize: '16px',
     cursor: 'pointer',
+  },
+  buttonContainer: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  buttonGroup: {
+    display: 'flex',
+    gap: '10px',
   },
   headerContainer: {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
+    height: '50px',
   },
   description: {
     color: 'black',
@@ -52,6 +61,16 @@ const styles: { [key: string]: React.CSSProperties } = {
     display: 'flex',
     color: 'black',
     justifyContent: 'end',
+  },
+  success: {
+    color: 'green',
+    fontSize: '20px',
+    marginTop: '20px',
+  },
+  error: {
+    color: 'red',
+    fontSize: '20px',
+    marginTop: '20px',
   },
 };
 
@@ -232,7 +251,7 @@ export default function PuzzleBoard() {
       );
 
       // Wait for the transaction
-      let result = await transferFromPredicateTx.waitForResult();
+      const result = await transferFromPredicateTx.waitForResult();
       setIsCorrect(result.isStatusSuccess);
     } catch (e) {
       const errString = `${e}`;
@@ -286,7 +305,7 @@ export default function PuzzleBoard() {
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
     };
-  }, [selectedCell]);
+  }, [selectedCell, handleCellChange]);
 
   useEffect(() => {
     if (selectedCell) {
@@ -296,7 +315,7 @@ export default function PuzzleBoard() {
   }, [selectedCell]);
 
   return (
-    <div style={styles.page}>
+    <div style={styles.boardContainer}>
       <div style={styles.headerContainer}>
         <h1>Swaydoku</h1>
         <button
@@ -340,27 +359,36 @@ export default function PuzzleBoard() {
           ))
         )}
       </div>
-      <button style={styles.button} onClick={handleNewPuzzle}>
-        New Puzzle
-      </button>
-      <button style={styles.button} onClick={handleClearBoard}>
-        Clear
-      </button>
-      <button style={styles.button} onClick={handleRevealBoard}>
-        Reveal
-      </button>
-      <button
-        disabled={!isSubmitEnabled}
-        style={{
-          ...styles.button,
-          background: isSubmitEnabled ? 'green' : 'gray',
-          cursor: isSubmitEnabled ? 'pointer' : 'not-allowed',
-        }}
-        onClick={handleSubmit}>
-        Submit
-      </button>
-      {error && <p style={{ color: 'red' }}>{error}</p>}
-      {isCorrect && <p style={{ color: 'green' }}>Correct!</p>}
+      <div style={styles.buttonContainer}>
+        <div style={styles.buttonGroup}>
+          <button style={styles.button} onClick={handleNewPuzzle}>
+            New Puzzle
+          </button>
+          <button style={styles.button} onClick={handleClearBoard}>
+            Clear
+          </button>
+          <button style={styles.button} onClick={handleRevealBoard}>
+            Reveal
+          </button>
+        </div>
+        <button
+          disabled={!isSubmitEnabled}
+          style={{
+            ...styles.button,
+            background: isSubmitEnabled ? 'green' : 'gray',
+            cursor: isSubmitEnabled ? 'pointer' : 'not-allowed',
+          }}
+          onClick={handleSubmit}>
+          Submit
+        </button>
+      </div>
+      {isCorrect ? (
+        <p style={styles.success}>Correct!</p>
+      ) : error ? (
+        <p style={styles.error}>{error}</p>
+      ) : (
+        <p style={styles.error}> </p>
+      )}
     </div>
   );
 }

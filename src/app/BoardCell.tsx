@@ -1,6 +1,5 @@
-import { useCallback } from 'react';
+import React from 'react';
 import { Cell } from './Board';
-import { on } from 'events';
 
 // Styles for the Sudoku board
 const styles: { [key: string]: React.CSSProperties } = {
