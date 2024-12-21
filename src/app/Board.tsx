@@ -1,6 +1,12 @@
 'use client';
 
-import React, { useMemo, useState } from 'react';
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import {
   useConnectUI,
   useDisconnect,
@@ -10,38 +16,20 @@ import {
 import './styles.css';
 import { Verifier } from './generated';
 import { ScriptTransactionRequest } from 'fuels';
+import { generateSudoku } from './util';
+import BoardCell from './BoardCell';
 
 // Styles for the Sudoku board
 const styles: { [key: string]: React.CSSProperties } = {
+  page: {
+    width: '500px',
+  },
   board: {
     display: 'grid',
     gridTemplateColumns: 'repeat(9, 55px)',
     gridTemplateRows: 'repeat(9, 55px)',
     justifyContent: 'center',
     marginTop: '20px',
-  },
-  cell: {
-    width: '55px',
-    height: '55px',
-    padding: '1px',
-    textAlign: 'center',
-    fontSize: '26px',
-    border: '1px solid #ccc',
-    outline: 'none',
-    color: 'blue',
-  },
-  fixedCell: {
-    width: '55px',
-    height: '55px',
-    padding: '1px',
-    textAlign: 'center',
-    fontSize: '26px',
-    border: '1px solid #ccc',
-    outline: 'none',
-    color: 'black',
-  },
-  highlightedCell: {
-    backgroundColor: '#f0f8ff',
   },
   button: {
     marginTop: '20px',
@@ -58,83 +46,21 @@ const styles: { [key: string]: React.CSSProperties } = {
   description: {
     color: 'black',
     fontSize: '14px',
+    marginTop: '20px',
+  },
+  notesMode: {
+    display: 'flex',
+    color: 'black',
+    justifyContent: 'end',
   },
 };
 
-const getCellBorderStyle = (rowIndex: number, colIndex: number) => {
-  const isThickRow = rowIndex % 3 === 0;
-  const isThickCol = colIndex % 3 === 0;
-
-  return {
-    borderTop: isThickRow ? '3px solid black' : '1px solid #ccc',
-    borderLeft: isThickCol ? '3px solid black' : '1px solid #ccc',
-    borderRight: colIndex === 8 ? '3px solid black' : '1px solid #ccc',
-    borderBottom: rowIndex === 8 ? '3px solid black' : '1px solid #ccc',
-  };
+export type Cell = {
+  value: string;
+  fixed: boolean;
+  notes: Set<number>;
 };
-
-type Board = { value: string; fixed: boolean }[][];
-
-// Function to generate a random Sudoku puzzle
-const generateSudoku = (): { unsolved: Board; solved: Board } => {
-  const emptyBoard: Board = Array.from({ length: 9 }, () =>
-    Array(9).fill({ value: '', fixed: false })
-  );
-
-  const isValidPlacement = (
-    board: Board,
-    row: number,
-    col: number,
-    num: string
-  ): boolean => {
-    for (let x = 0; x < 9; x++) {
-      if (board[row][x].value === num || board[x][col].value === num)
-        return false;
-      const subgridRow = 3 * Math.floor(row / 3) + Math.floor(x / 3);
-      const subgridCol = 3 * Math.floor(col / 3) + (x % 3);
-      if (board[subgridRow][subgridCol].value === num) return false;
-    }
-    return true;
-  };
-
-  const shuffle = (array: string[]): string[] => {
-    for (let i = array.length - 1; i >= 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [array[i], array[j]] = [array[j], array[i]];
-    }
-    return array;
-  };
-
-  const fillBoard = (board: Board): boolean => {
-    for (let row = 0; row < 9; row++) {
-      for (let col = 0; col < 9; col++) {
-        if (board[row][col].value === '') {
-          const nums = shuffle(['1', '2', '3', '4', '5', '6', '7', '8', '9']);
-          for (const num of nums) {
-            if (isValidPlacement(board, row, col, num)) {
-              board[row][col] = { value: num, fixed: true };
-              if (fillBoard(board)) return true;
-              board[row][col] = { value: '', fixed: false };
-            }
-          }
-          return false;
-        }
-      }
-    }
-    return true;
-  };
-
-  fillBoard(emptyBoard);
-  const solved = emptyBoard;
-  const unsolved = emptyBoard.map((row) => {
-    return row.map((cell) => {
-      const fixed = Math.random() < 0.3;
-      return fixed ? cell : { value: '', fixed: false };
-    });
-  });
-
-  return { solved, unsolved };
-};
+export type Board = Cell[][];
 
 export default function PuzzleBoard() {
   // Board state
@@ -146,6 +72,12 @@ export default function PuzzleBoard() {
     col: number;
   } | null>(null);
   const [isCorrect, setIsCorrect] = useState(false);
+  const [notesMode, setNotesMode] = useState(false);
+
+  // Refs for navigation
+  const refs = useRef<(HTMLInputElement | null)[][]>(
+    Array.from({ length: 9 }, () => Array(9).fill(null))
+  );
 
   // Error handler
   const [error, setError] = useState<string | null>(null);
@@ -157,21 +89,64 @@ export default function PuzzleBoard() {
   const { wallet } = useWallet();
 
   // Handle input changes in cells
-  const handleChange = (row: number, col: number, value: string): void => {
-    if (
-      !board[row][col].fixed &&
-      (value === '' || (/^[1-9]$/.test(value) && value.length === 1))
-    ) {
-      const newBoard = board.map((r, i) =>
-        r.map((c, j) => (i === row && j === col ? { ...c, value } : c))
-      );
-      setBoard(newBoard);
-    }
-  };
+  const handleCellChange = useCallback(
+    (row: number, col: number, value: string): void => {
+      if (
+        board[row][col].fixed ||
+        !(value === '' || /^[1-9]$/.test(value) || value.length > 1)
+      ) {
+        return;
+      }
 
-  const handleCellClick = (row: number, col: number): void => {
-    setSelectedCell({ row, col });
-  };
+      const cell = board[row][col];
+      if (notesMode && !cell.value && /^[1-9]$/.test(value)) {
+        // Update notes
+        console.log('notesMode', notesMode);
+        console.log('cell', cell);
+        const noteValue = parseInt(value);
+        if (cell.notes.has(noteValue)) {
+          cell.notes.delete(noteValue);
+        } else {
+          cell.notes.add(noteValue);
+        }
+        console.log('row col', row, col);
+        const newBoard = [...board];
+        newBoard[row][col] = cell;
+        console.log('newBoard', newBoard);
+
+        setBoard(newBoard);
+      } else {
+        // Update cell value
+        const newBoard = board.map((r, i) =>
+          r.map((c, j) =>
+            i === row && j === col
+              ? { ...c, value, notes: new Set<number>() }
+              : c
+          )
+        );
+        // Update notes of other cells in the same row, column, or 3x3 box
+        const subgridRow = 3 * Math.floor(row / 3);
+        const subgridCol = 3 * Math.floor(col / 3);
+        for (let i = 0; i < 9; i++) {
+          if (i !== row) {
+            newBoard[i][col].notes.delete(parseInt(value));
+          }
+          if (i !== col) {
+            newBoard[row][i].notes.delete(parseInt(value));
+          }
+          const subgridRowIdx = subgridRow + Math.floor(i / 3);
+          const subgridColIdx = subgridCol + (i % 3);
+          if (subgridRowIdx !== row && subgridColIdx !== col) {
+            newBoard[subgridRowIdx][subgridColIdx].notes.delete(
+              parseInt(value)
+            );
+          }
+        }
+        setBoard(newBoard);
+      }
+    },
+    [board, notesMode]
+  );
 
   // Handle generating a new puzzle
   const handleNewPuzzle = (): void => {
@@ -278,8 +253,50 @@ export default function PuzzleBoard() {
     );
   }, [isConnected, provider, wallet, board]);
 
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key.toLowerCase() === 'n') {
+        setNotesMode((prev) => !prev);
+      }
+      if (selectedCell) {
+        const { row, col } = selectedCell;
+        switch (e.key) {
+          case 'ArrowUp':
+            if (row > 0) setSelectedCell({ row: row - 1, col });
+            break;
+          case 'ArrowDown':
+            if (row < 8) setSelectedCell({ row: row + 1, col });
+            break;
+          case 'ArrowLeft':
+            if (col > 0) setSelectedCell({ row, col: col - 1 });
+            break;
+          case 'ArrowRight':
+            if (col < 8) setSelectedCell({ row, col: col + 1 });
+            break;
+          case 'Backspace':
+            handleCellChange(row, col, '');
+            break;
+          default:
+            break;
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [selectedCell]);
+
+  useEffect(() => {
+    if (selectedCell) {
+      const { row, col } = selectedCell;
+      refs.current[row][col]?.focus(); // Focus the selected input field
+    }
+  }, [selectedCell]);
+
   return (
-    <div>
+    <div style={styles.page}>
       <div style={styles.headerContainer}>
         <h1>Swaydoku</h1>
         <button
@@ -289,39 +306,36 @@ export default function PuzzleBoard() {
         </button>
       </div>
       <p style={styles.description}>
-        Fill in the board with numbers from 1 to 9
+        Each row, column, and 3x3 box must contain all the numbers from 1 to 9.
+        <br />
+        The board will be submitted to a predicate that will verify the
+        solution. Connect your Fuel wallet to submit!
       </p>
-      <p style={styles.description}>
-        Each row, column, and 3x3 subgrid must contain all the numbers from 1 to
-        9
-      </p>
-      <p style={styles.description}>
-        The board will be submitted to a predicate that will verify the solution
-      </p>
+      <div style={styles.notesMode}>
+        <label>
+          <input
+            type='checkbox'
+            checked={notesMode}
+            onChange={() => setNotesMode(!notesMode)}
+          />
+          {" Notes Mode (Press 'N' to toggle)"}
+        </label>
+      </div>
       <div style={styles.board}>
         {board.map((row, rowIndex) =>
           row.map((cell, colIndex) => (
-            <input
+            <BoardCell
               key={`cell-${rowIndex}-${colIndex}`}
-              style={{
-                ...(cell.fixed ? styles.fixedCell : styles.cell),
-                ...(selectedCell &&
-                (selectedCell.row === rowIndex ||
-                  selectedCell.col === colIndex ||
-                  (Math.floor(rowIndex / 3) ===
-                    Math.floor(selectedCell.row / 3) &&
-                    Math.floor(colIndex / 3) ===
-                      Math.floor(selectedCell.col / 3)))
-                  ? styles.highlightedCell
-                  : {}),
-                ...getCellBorderStyle(rowIndex, colIndex),
-              }}
-              type='text'
-              maxLength={1}
-              value={cell.value}
-              onChange={(e) => handleChange(rowIndex, colIndex, e.target.value)}
-              onFocus={() => handleCellClick(rowIndex, colIndex)}
-              disabled={cell.fixed}
+              cell={cell}
+              rowIndex={rowIndex}
+              colIndex={colIndex}
+              selectedCell={selectedCell}
+              onChange={(e) =>
+                handleCellChange(rowIndex, colIndex, e.target.value)
+              }
+              onFocus={() => setSelectedCell({ row: rowIndex, col: colIndex })}
+              onBlur={() => setSelectedCell(null)}
+              inputRef={(el) => (refs.current[rowIndex][colIndex] = el)}
             />
           ))
         )}
