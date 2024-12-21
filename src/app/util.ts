@@ -6,12 +6,15 @@ export const emptyBoard = (): Board =>
     Array.from({ length: 9 }, () => ({
       value: '',
       fixed: false,
+      isIncorrect: null,
       notes: new Set(),
     }))
   );
 
 // Generates a random Sudoku puzzle. Not guaranteed to have a unique solution.
-export const generateSudoku = (): { unsolved: Board; solved: Board } => {
+export const generateSudoku = (
+  difficulty: number
+): { unsolved: Board; solved: Board } => {
   const board = emptyBoard();
 
   const isValidPlacement = (
@@ -61,10 +64,52 @@ export const generateSudoku = (): { unsolved: Board; solved: Board } => {
   const solved = board;
   const unsolved = board.map((row) => {
     return row.map((cell) => {
-      const fixed = Math.random() < 0.35; // Difficulty level. TODO: Make this configurable
+      const fixed = Math.random() < difficulty;
       return fixed ? cell : { ...cell, value: '', fixed: false };
     });
   });
 
   return { solved, unsolved };
+};
+
+// Find incorrect cells in a board
+export const findIncorrectCells = (board: Board): Board => {
+  const isValidPlacement = (
+    board: Board,
+    row: number,
+    col: number,
+    value: string
+  ) => {
+    for (let i = 0; i < 9; i++) {
+      // Check row and column
+      if (board[row][i].value === value && i !== col) return false;
+      if (board[i][col].value === value && i !== row) return false;
+
+      // Check 3x3 grid
+      const subgridRow = 3 * Math.floor(row / 3) + Math.floor(i / 3);
+      const subgridCol = 3 * Math.floor(col / 3) + (i % 3);
+      if (
+        board[subgridRow][subgridCol].value === value &&
+        !(subgridRow === row && subgridCol === col)
+      ) {
+        return false;
+      }
+    }
+    return true;
+  };
+
+  const newBoard = board.map((row, rowIndex) =>
+    row.map((cell, colIndex) => {
+      const isIncorrect =
+        !cell.fixed &&
+        cell.value !== '' &&
+        !isValidPlacement(board, rowIndex, colIndex, cell.value);
+      return {
+        ...cell,
+        isIncorrect,
+      };
+    })
+  );
+
+  return newBoard;
 };

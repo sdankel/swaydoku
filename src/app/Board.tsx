@@ -16,7 +16,7 @@ import {
 import './styles.css';
 import { Verifier } from './generated';
 import { ScriptTransactionRequest } from 'fuels';
-import { emptyBoard, generateSudoku } from './util';
+import { emptyBoard, findIncorrectCells, generateSudoku } from './util';
 import BoardCell from './BoardCell';
 
 // Styles for the Sudoku board
@@ -59,8 +59,11 @@ const styles: { [key: string]: React.CSSProperties } = {
   },
   notesMode: {
     display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     color: 'black',
-    justifyContent: 'end',
+    fontSize: '14px',
+    marginTop: '10px',
   },
   success: {
     color: 'green',
@@ -77,6 +80,7 @@ const styles: { [key: string]: React.CSSProperties } = {
 export type Cell = {
   value: string;
   fixed: boolean;
+  isIncorrect: boolean | null;
   notes: Set<number>;
 };
 export type Board = Cell[][];
@@ -91,6 +95,8 @@ export default function PuzzleBoard() {
   } | null>(null);
   const [isCorrect, setIsCorrect] = useState(false);
   const [notesMode, setNotesMode] = useState(false);
+  type Difficulty = 'easy' | 'medium' | 'hard' | 'extreme';
+  const [difficulty, setDifficulty] = useState<Difficulty>('medium');
   const [isInitialized, setIsInitialized] = useState(false);
 
   // Refs for navigation
@@ -139,7 +145,7 @@ export default function PuzzleBoard() {
         const newBoard = board.map((r, i) =>
           r.map((c, j) =>
             i === row && j === col
-              ? { ...c, value, notes: new Set<number>() }
+              ? { ...c, value, isIncorrect: false, notes: new Set<number>() }
               : c
           )
         );
@@ -169,18 +175,44 @@ export default function PuzzleBoard() {
 
   // Handle generating a new puzzle
   const handleNewPuzzle = useCallback((): void => {
-    const { unsolved, solved } = generateSudoku();
+    const difficultyMap: Record<Difficulty, number> = {
+      easy: 0.5,
+      medium: 0.35,
+      hard: 0.25,
+      extreme: 0.2,
+    };
+
+    const { unsolved, solved } = generateSudoku(difficultyMap[difficulty]);
     setBoard(unsolved);
     setSolvedBoard(solved);
     setSelectedCell(null);
     setIsCorrect(false);
     setError(null);
-  }, [setBoard, setSolvedBoard, setSelectedCell, setIsCorrect, setError]);
+  }, [
+    setBoard,
+    setSolvedBoard,
+    setSelectedCell,
+    setIsCorrect,
+    setError,
+    difficulty,
+  ]);
+
+  // Handle changing difficulty
+  const handleDifficultyChange = useCallback(
+    (e: React.ChangeEvent<HTMLSelectElement>) => {
+      const selectedDifficulty = e.target.value;
+      setDifficulty(selectedDifficulty as Difficulty);
+      handleNewPuzzle();
+    },
+    [handleNewPuzzle, setDifficulty]
+  );
 
   // Handle clearing inputs without regenerating the puzzle
   const handleClearBoard = useCallback((): void => {
     const clearedBoard = board.map((row) =>
-      row.map((cell) => (cell.fixed ? cell : { ...cell, value: '' }))
+      row.map((cell) =>
+        cell.fixed ? cell : { ...cell, value: '', notes: new Set<number>() }
+      )
     );
 
     setBoard(clearedBoard);
@@ -257,6 +289,9 @@ export default function PuzzleBoard() {
       const errString = `${e}`;
       if (errString.includes('PredicateReturnedNonOne')) {
         setError('Incorrect!');
+
+        // Highlight incorrect cells
+        setBoard(findIncorrectCells(board));
       } else {
         setError(errString);
       }
@@ -345,6 +380,19 @@ export default function PuzzleBoard() {
         solution. Connect your Fuel wallet to submit!
       </p>
       <div style={styles.notesMode}>
+        <label>
+          {'Difficulty Level: '}
+          <select
+            style={styles.dropdown}
+            value={difficulty}
+            onChange={handleDifficultyChange}>
+            <option value='easy'>Easy</option>
+            <option value='medium'>Medium</option>
+            <option value='hard'>Hard</option>
+            <option value='extreme'>Extreme</option>
+          </select>
+        </label>
+
         <label>
           <input
             type='checkbox'

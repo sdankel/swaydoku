@@ -23,6 +23,9 @@ const styles: { [key: string]: React.CSSProperties } = {
   selectedCell: {
     backgroundColor: '#cae6ff',
   },
+  incorrectCell: {
+    color: 'red',
+  },
   notes: {
     fontSize: '12px',
     display: 'grid',
@@ -80,7 +83,7 @@ function BoardCell({
     selectedCell.row === rowIndex &&
     selectedCell.col === colIndex;
 
-console.log('BoardCell', rowIndex, colIndex, cell);
+  console.log('BoardCell', rowIndex, colIndex, cell);
 
   return (
     <div style={{ position: 'relative' }}>
@@ -88,6 +91,7 @@ console.log('BoardCell', rowIndex, colIndex, cell);
         ref={inputRef}
         style={{
           ...styles.cell,
+          ...(cell.isIncorrect ? styles.incorrectCell : {}),
           ...(cell.fixed ? styles.fixedCell : {}),
           ...(isHighlighted ? styles.highlightedCell : {}),
           ...(isSelected ? styles.selectedCell : {}),
