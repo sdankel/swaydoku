@@ -40,6 +40,9 @@ const styles: { [key: string]: React.CSSProperties } = {
     outline: 'none',
     color: 'black',
   },
+  highlightedCell: {
+    backgroundColor: '#f0f8ff',
+  },
   button: {
     marginTop: '20px',
     marginRight: '10px',
@@ -138,6 +141,10 @@ export default function PuzzleBoard() {
   const { unsolved, solved } = generateSudoku();
   const [board, setBoard] = useState<Board>(unsolved);
   const [solvedBoard, setSolvedBoard] = useState<Board>(solved);
+  const [selectedCell, setSelectedCell] = useState<{
+    row: number;
+    col: number;
+  } | null>(null);
   const [isCorrect, setIsCorrect] = useState(false);
 
   // Error handler
@@ -162,11 +169,16 @@ export default function PuzzleBoard() {
     }
   };
 
+  const handleCellClick = (row: number, col: number): void => {
+    setSelectedCell({ row, col });
+  };
+
   // Handle generating a new puzzle
   const handleNewPuzzle = (): void => {
     const { unsolved, solved } = generateSudoku();
     setBoard(unsolved);
     setSolvedBoard(solved);
+    setSelectedCell(null);
     setIsCorrect(false);
     setError(null);
   };
@@ -293,12 +305,22 @@ export default function PuzzleBoard() {
               key={`cell-${rowIndex}-${colIndex}`}
               style={{
                 ...(cell.fixed ? styles.fixedCell : styles.cell),
+                ...(selectedCell &&
+                (selectedCell.row === rowIndex ||
+                  selectedCell.col === colIndex ||
+                  (Math.floor(rowIndex / 3) ===
+                    Math.floor(selectedCell.row / 3) &&
+                    Math.floor(colIndex / 3) ===
+                      Math.floor(selectedCell.col / 3)))
+                  ? styles.highlightedCell
+                  : {}),
                 ...getCellBorderStyle(rowIndex, colIndex),
               }}
               type='text'
               maxLength={1}
               value={cell.value}
               onChange={(e) => handleChange(rowIndex, colIndex, e.target.value)}
+              onFocus={() => handleCellClick(rowIndex, colIndex)}
               disabled={cell.fixed}
             />
           ))
