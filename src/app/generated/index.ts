@@ -8,4 +8,5 @@
   Fuels version: 0.97.2
 */
 
-export { Verifier } from './Verifier';
+export { SwaydokuContract } from './SwaydokuContract';
+export { SwaydokuContractFactory } from './SwaydokuContractFactory';

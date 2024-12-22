@@ -83,8 +83,6 @@ function BoardCell({
     selectedCell.row === rowIndex &&
     selectedCell.col === colIndex;
 
-  console.log('BoardCell', rowIndex, colIndex, cell);
-
   return (
     <div style={{ position: 'relative' }}>
       <input

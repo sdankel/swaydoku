@@ -14,10 +14,11 @@ import {
   useWallet,
 } from '@fuels/react';
 import './styles.css';
-import { Verifier } from './generated';
-import { ScriptTransactionRequest } from 'fuels';
 import { emptyBoard, findIncorrectCells, generateSudoku } from './util';
 import BoardCell from './BoardCell';
+import { SwaydokuContract } from './generated';
+import { IdentityInput } from './generated/SwaydokuContract';
+import { Address } from 'fuels';
 
 // Styles for the Sudoku board
 const styles: { [key: string]: React.CSSProperties } = {
@@ -126,18 +127,14 @@ export default function PuzzleBoard() {
       const cell = board[row][col];
       if (notesMode && !cell.value && /^[1-9]$/.test(value)) {
         // Update notes
-        console.log('notesMode', notesMode);
-        console.log('cell', cell);
         const noteValue = parseInt(value);
         if (cell.notes.has(noteValue)) {
           cell.notes.delete(noteValue);
         } else {
           cell.notes.add(noteValue);
         }
-        console.log('row col', row, col);
         const newBoard = [...board];
         newBoard[row][col] = cell;
-        console.log('newBoard', newBoard);
 
         setBoard(newBoard);
       } else {
@@ -239,55 +236,28 @@ export default function PuzzleBoard() {
       return;
     }
 
-    const params = board.flatMap((row) =>
+    const answer = board.flatMap((row) =>
       row.map((cell) => parseInt(cell.value))
     );
-    const predicate = new Verifier({ provider, data: [params] });
-
-    // The amount of coins to send to the predicate
-    const amountToPredicate = 1_000;
-
+    const identity: IdentityInput = {
+      Address: { bits: wallet.address.toString() },
+    };
+    const contractAddress = Address.fromB256(
+      provider.url === 'https://testnet.fuel.network/v1/graphql'
+        ? '0x4d52fad69628799490cce33fe1da84a26f3aa0fbe58714409f1978aeaebcc488'
+        : '0xe523fa0539ef5e7e4a681816d025f3ea27a6aaae119ab9c2917f3afb0ea80db7'
+    );
+    const contract = new SwaydokuContract(contractAddress, wallet);
     try {
-      // Add some funds to the predicate to be able to spend the predicate
-      const transactionRequest = new ScriptTransactionRequest({
-        gasLimit: 2000,
-        maxFee: 0,
-      });
-
-      // Get the resources available to send from the predicate
-      const predicateCoins = await predicate.getResourcesToSpend([
-        { amount: 2000, assetId: provider.getBaseAssetId() },
-      ]);
-
-      // Add the predicate input and resources
-      transactionRequest.addResources(predicateCoins);
-
-      // Fund the predicate with some funds from our wallet (sender)
-      const fundPredicateTx = await wallet.transfer(
-        predicate.address,
-        amountToPredicate,
-        provider.getBaseAssetId()
-      );
-
-      // Wait for the transaction
-      await fundPredicateTx.waitForResult();
-
-      // The amount of coins to send from the predicate, to our receiver wallet.
-      const amountToReceiver = 1;
-
-      // Transfer funds from the predicate, to our receiver wallet
-      const transferFromPredicateTx = await predicate.transfer(
-        wallet.address,
-        amountToReceiver,
-        provider.getBaseAssetId()
-      );
-
-      // Wait for the transaction
-      const result = await transferFromPredicateTx.waitForResult();
-      setIsCorrect(result.isStatusSuccess);
+      const { waitForResult } = await contract.functions
+        .mint(identity, 1, answer)
+        .call();
+      const result = await waitForResult();
+      console.log(result);
+      setIsCorrect(true);
     } catch (e) {
       const errString = `${e}`;
-      if (errString.includes('PredicateReturnedNonOne')) {
+      if (errString.includes('IncorrectAnswer')) {
         setError('Incorrect!');
 
         // Highlight incorrect cells
@@ -356,13 +326,6 @@ export default function PuzzleBoard() {
     }
   }, [selectedCell]);
 
-  console.log(
-    solvedBoard.map((row) => row.map((cell) => cell.value).join(' ')).join('\n')
-  );
-  console.log(
-    board.map((row) => row.map((cell) => cell.fixed).join(' ')).join('\n')
-  );
-
   return (
     <div style={styles.boardContainer}>
       <div style={styles.headerContainer}>
@@ -376,8 +339,9 @@ export default function PuzzleBoard() {
       <p style={styles.description}>
         Each row, column, and 3x3 box must contain all the numbers from 1 to 9.
         <br />
-        The board will be submitted to a predicate that will verify the
-        solution. Connect your Fuel wallet to submit!
+        The board will be submitted to a contract that will verify the solution.
+        If your answer is correct, you'll receive an NFT. Connect your Fuel
+        wallet to submit!
       </p>
       <div style={styles.notesMode}>
         <label>
@@ -445,7 +409,9 @@ export default function PuzzleBoard() {
         </button>
       </div>
       {isCorrect ? (
-        <p style={styles.success}>Correct!</p>
+        <p style={styles.success}>
+          {'Correct! Check your wallet for a comemorative NFT.'}
+        </p>
       ) : error ? (
         <p style={styles.error}>{error}</p>
       ) : (
