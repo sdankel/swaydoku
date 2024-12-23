@@ -340,7 +340,7 @@ export default function PuzzleBoard() {
         Each row, column, and 3x3 box must contain all the numbers from 1 to 9.
         <br />
         The board will be submitted to a contract that will verify the solution.
-        If your answer is correct, you'll receive an NFT. Connect your Fuel
+        If your answer is correct, you will receive an NFT. Connect your Fuel
         wallet to submit!
       </p>
       <div style={styles.notesMode}>
